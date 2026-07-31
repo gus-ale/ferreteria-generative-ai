@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Tests
+        env:
+          APP_ENV: test
+          DATABASE_URL: sqlite+aiosqlite://
+          AI_PROVIDER: demo
+          EMBEDDING_PROVIDER: local
+          ADMIN_API_KEY: test-admin-key
+        run: |
+          pytest -v \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-fail-under=75
+
+      - name: Application evals
+        env:
+          APP_ENV: test
+          DATABASE_URL: sqlite+aiosqlite://
+          AI_PROVIDER: demo
+          EMBEDDING_PROVIDER: local
+          ADMIN_API_KEY: test-admin-key
+        run: python -m evals.run_evals
+
+      - name: Build container
+        run: docker build -t ferreteria-generative-ai:test .
